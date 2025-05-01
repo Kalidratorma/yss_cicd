@@ -1,0 +1,66 @@
+pipeline {
+  agent any
+
+  environment {
+    VERSION = "${env.BUILD_NUMBER}"
+    POM_VERSION = sh(script: "mvn help:evaluate -Dexpression=project.version -q -DforceStdout", returnStdout: true).trim()
+  }
+
+  options {
+    buildDiscarder(logRotator(daysToKeepStr: '1', numToKeepStr: '2'))
+  }
+
+  triggers {
+    pollSCM('* * * * *')
+  }
+
+  stages {
+    stage('Clean & Build') {
+      steps {
+        cleanWs()
+        sh 'mvn clean install -DskipTests=true'
+      }
+    }
+
+    stage('Transfer & Build Image (Ansible)') {
+      steps {
+        sshPublisher(publishers: [
+          sshPublisherDesc(
+            configName: 'ansible-server',
+            transfers: [
+              sshTransfer(
+                sourceFiles: "target/yss-${POM_VERSION}.jar",
+                removePrefix: 'target',
+                remoteDirectory: '/opt/yss',
+                execCommand: "ansible-playbook /opt/yss/create_image.yml --extra-vars \"VERSION=${POM_VERSION}\"",
+                execTimeout: 120000
+              )
+            ]
+          )
+        ])
+      }
+    }
+
+    stage('Deploy to Kubernetes (Ansible)') {
+      steps {
+        sshPublisher(publishers: [
+          sshPublisherDesc(
+            configName: 'ansible-server',
+            transfers: [
+              sshTransfer(
+                execCommand: "ansible-playbook -i /opt/yss/hosts /opt/yss/kube_deploy.yml --extra-vars \"VERSION=${POM_VERSION}\"",
+                execTimeout: 120000
+              )
+            ]
+          )
+        ])
+      }
+    }
+  }
+
+  post {
+    always {
+      echo 'Build completed'
+    }
+  }
+}
