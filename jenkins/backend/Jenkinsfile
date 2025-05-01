@@ -2,8 +2,8 @@ pipeline {
   agent any
 
   environment {
-    VERSION = "${env.BUILD_NUMBER}"
-    POM_VERSION = sh(script: "mvn help:evaluate -Dexpression=project.version -q -DforceStdout", returnStdout: true).trim()
+    // Позже будет установлена реальная версия из pom.xml
+    POM_VERSION = ''
   }
 
   options {
@@ -11,32 +11,54 @@ pipeline {
   }
 
   triggers {
-    pollSCM('* * * * *')
+    pollSCM('* * * * *') // Пулл каждую минуту (можно заменить на webhook)
   }
 
   stages {
-    stage('Checkout yss source') {
+    stage('Checkout yss_cicd (infra/Jenkinsfile)') {
+      steps {
+        echo 'Jenkinsfile взят из yss_cicd — текущая стадия завершена автоматом.'
+      }
+    }
+
+    stage('Checkout yss source (backend)') {
       steps {
         git url: 'https://github.com/Kalidratorma/yss.git', branch: 'master', credentialsId: 'github'
       }
     }
 
-    stage('Clean & Build') {
+    stage('Extract version from pom.xml') {
       steps {
-        cleanWs()
-        sh 'mvn clean install -DskipTests=true'
+        dir('backend') {
+          script {
+            POM_VERSION = sh(
+              script: 'mvn help:evaluate -Dexpression=project.version -q -DforceStdout',
+              returnStdout: true
+            ).trim()
+            echo "VERSION: ${POM_VERSION}"
+          }
+        }
       }
     }
 
-    stage('Transfer & Build Image (Ansible)') {
+    stage('Clean & Build (Maven)') {
+      steps {
+        cleanWs()
+        dir('backend') {
+          sh 'mvn clean install -DskipTests=true'
+        }
+      }
+    }
+
+    stage('Transfer artifact & build Docker image (Ansible)') {
       steps {
         sshPublisher(publishers: [
           sshPublisherDesc(
             configName: 'ansible-server',
             transfers: [
               sshTransfer(
-                sourceFiles: "target/yss-${POM_VERSION}.jar",
-                removePrefix: 'target',
+                sourceFiles: "backend/target/yss-${POM_VERSION}.jar",
+                removePrefix: 'backend/target',
                 remoteDirectory: '/opt/yss',
                 execCommand: "ansible-playbook /opt/yss/create_image.yml --extra-vars \"VERSION=${POM_VERSION}\"",
                 execTimeout: 120000
@@ -65,8 +87,11 @@ pipeline {
   }
 
   post {
-    always {
-      echo 'Build completed'
+    success {
+      echo "✅ Deploy complete! Version ${POM_VERSION} deployed to cluster."
+    }
+    failure {
+      echo "❌ Build or deploy failed!"
     }
   }
 }
