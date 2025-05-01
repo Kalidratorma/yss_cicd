@@ -2,7 +2,6 @@ pipeline {
   agent any
 
   environment {
-    // Позже будет установлена реальная версия из pom.xml
     POM_VERSION = ''
   }
 
@@ -11,10 +10,16 @@ pipeline {
   }
 
   triggers {
-    pollSCM('* * * * *') // Пулл каждую минуту (можно заменить на webhook)
+    pollSCM('* * * * *')
   }
 
   stages {
+    stage('Workspace Cleanup') {
+      steps {
+        cleanWs() // Удаляем всё, что было до старта сборки
+      }
+    }
+
     stage('Checkout yss_cicd (infra/Jenkinsfile)') {
       steps {
         echo 'Jenkinsfile взят из yss_cicd — текущая стадия завершена автоматом.'
@@ -43,7 +48,6 @@ pipeline {
 
     stage('Clean & Build (Maven)') {
       steps {
-        cleanWs()
         dir('backend') {
           sh 'mvn clean install -DskipTests=true'
         }
