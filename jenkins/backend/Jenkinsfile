@@ -16,7 +16,7 @@ pipeline {
   stages {
     stage('Workspace Cleanup') {
       steps {
-        cleanWs() // Удаляем всё, что было до старта сборки
+        cleanWs()
       }
     }
 
@@ -34,7 +34,7 @@ pipeline {
 
     stage('Extract version from pom.xml') {
       steps {
-        dir('backend') {
+        dir('yss') {
           script {
             POM_VERSION = sh(
               script: 'mvn help:evaluate -Dexpression=project.version -q -DforceStdout',
@@ -48,7 +48,7 @@ pipeline {
 
     stage('Clean & Build (Maven)') {
       steps {
-        dir('backend') {
+        dir('yss') {
           sh 'mvn clean install -DskipTests=true'
         }
       }
@@ -61,8 +61,8 @@ pipeline {
             configName: 'ansible-server',
             transfers: [
               sshTransfer(
-                sourceFiles: "backend/target/yss-${POM_VERSION}.jar",
-                removePrefix: 'backend/target',
+                sourceFiles: "yss/target/yss-${POM_VERSION}.jar",
+                removePrefix: 'yss/target',
                 remoteDirectory: '/opt/yss',
                 execCommand: "ansible-playbook /opt/yss/create_image.yml --extra-vars \"VERSION=${POM_VERSION}\"",
                 execTimeout: 120000
