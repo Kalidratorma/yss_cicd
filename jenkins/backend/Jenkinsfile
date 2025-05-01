@@ -14,13 +14,13 @@ pipeline {
     pollSCM('* * * * *')
   }
 
-  stage('Checkout yss source') {
-    steps {
-      git url: 'https://github.com/Kalidratorma/yss.git', branch: 'master', credentialsId: 'github'
-    }
-  }
-
   stages {
+    stage('Checkout yss source') {
+      steps {
+        git url: 'https://github.com/Kalidratorma/yss.git', branch: 'master', credentialsId: 'github'
+      }
+    }
+
     stage('Clean & Build') {
       steps {
         cleanWs()
