@@ -10,13 +10,13 @@ pipeline {
   }
 
   triggers {
-    pollSCM('* * * * *')
+    pollSCM('* * * * *') // Проверка репозитория каждую минуту
   }
 
   stages {
     stage('Workspace Cleanup') {
       steps {
-        cleanWs()
+        cleanWs() // Очистка рабочего каталога перед всем
       }
     }
 
@@ -34,23 +34,19 @@ pipeline {
 
     stage('Extract version from pom.xml') {
       steps {
-        dir('yss') {
-          script {
-            POM_VERSION = sh(
-              script: 'mvn help:evaluate -Dexpression=project.version -q -DforceStdout',
-              returnStdout: true
-            ).trim()
-            echo "VERSION: ${POM_VERSION}"
-          }
+        script {
+          POM_VERSION = sh(
+            script: 'mvn help:evaluate -Dexpression=project.version -q -DforceStdout',
+            returnStdout: true
+          ).trim()
+          echo "VERSION: ${POM_VERSION}"
         }
       }
     }
 
     stage('Clean & Build (Maven)') {
       steps {
-        dir('yss') {
-          sh 'mvn clean install -DskipTests=true'
-        }
+        sh 'mvn clean install -DskipTests=true'
       }
     }
 
@@ -61,8 +57,8 @@ pipeline {
             configName: 'ansible-server',
             transfers: [
               sshTransfer(
-                sourceFiles: "yss/target/yss-${POM_VERSION}.jar",
-                removePrefix: 'yss/target',
+                sourceFiles: "target/yss-${POM_VERSION}.jar",
+                removePrefix: 'target',
                 remoteDirectory: '/opt/yss',
                 execCommand: "ansible-playbook /opt/yss/create_image.yml --extra-vars \"VERSION=${POM_VERSION}\"",
                 execTimeout: 120000
@@ -92,10 +88,10 @@ pipeline {
 
   post {
     success {
-      echo "✅ Deploy complete! Version ${POM_VERSION} deployed to cluster."
+      echo "✅ Backend version ${POM_VERSION} deployed successfully!"
     }
     failure {
-      echo "❌ Build or deploy failed!"
+      echo "❌ Backend build or deploy failed!"
     }
   }
 }
